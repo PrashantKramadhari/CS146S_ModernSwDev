@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Action Item Extractor</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif; margin: 2rem auto; max-width: 800px; padding: 0 1rem; }
+      h1 { font-size: 1.5rem; }
+      textarea { width: 100%; min-height: 160px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace; }
+      button { padding: 0.5rem 1rem; }
+      .items { margin-top: 1rem; }
+      .item { display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0; }
+      .muted { color: #6b7280; font-size: 0.875rem; }
+      .row { display: flex; gap: 0.5rem; align-items: center; }
+    </style>
+  </head>
+  <body>
+    <h1>Action Item Extractor</h1>
+    <p class="muted">Paste notes and extract actionable items. Minimal raw HTML frontend.</p>
+
+    <label for="text">Notes</label>
+    <textarea id="text" placeholder="Paste notes here...&#10;e.g.&#10;- [ ] Set up database&#10;- Implement extract endpoint"></textarea>
+    <div class="row">
+      <label class="row"><input id="save_note" type="checkbox" checked /> Save as note</label>
+      <button id="extract">Extract</button>
+      <button id="extract_llm">Extract LLM</button>
+    </div>
+
+    <div class="items" id="items"></div>
+
+    <div style="margin-top: 2rem;">
+      <h2>Notes</h2>
+      <button id="list_notes">List Notes</button>
+      <div id="notes" style="margin-top: 1rem;"></div>
+    </div>
+
+    <script>
+      const $ = (sel) => document.querySelector(sel);
+      const itemsEl = $('#items');
+      const notesEl = $('#notes');
+      
+      // Helper function to render action items
+      const renderItems = (items) => {
+        if (!items || items.length === 0) {
+          itemsEl.innerHTML = '<p class="muted">No action items found.</p>';
+          return;
+        }
+        itemsEl.innerHTML = items.map(it => (
+          `<div class="item"><input type="checkbox" data-id="${it.id}" ${it.done ? 'checked' : ''} /> <span>${it.text}</span></div>`
+        )).join('');
+        itemsEl.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+          cb.addEventListener('change', async (e) => {
+            const id = e.target.getAttribute('data-id');
+            try {
+              await fetch(`/action-items/${id}/done`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ done: e.target.checked }),
+              });
+            } catch (err) {
+              console.error('Failed to update action item:', err);
+            }
+          });
+        });
+      };
+
+      // Extract button (heuristic-based)
+      $('#extract').addEventListener('click', async () => {
+        const text = $('#text').value;
+        const save = $('#save_note').checked;
+        itemsEl.textContent = 'Extracting...';
+        try {
+          const res = await fetch('/action-items/extract', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text, save_note: save }),
+          });
+          if (!res.ok) throw new Error('Request failed');
+          const data = await res.json();
+          renderItems(data.items);
+        } catch (err) {
+          console.error(err);
+          itemsEl.textContent = 'Error extracting items';
+        }
+      });
+
+      // Extract LLM button
+      $('#extract_llm').addEventListener('click', async () => {
+        const text = $('#text').value;
+        const save = $('#save_note').checked;
+        itemsEl.textContent = 'Extracting with LLM...';
+        try {
+          const res = await fetch('/action-items/extract-llm', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text, save_note: save }),
+          });
+          if (!res.ok) throw new Error('Request failed');
+          const data = await res.json();
+          renderItems(data.items);
+        } catch (err) {
+          console.error(err);
+          itemsEl.textContent = 'Error extracting items with LLM';
+        }
+      });
+
+      // List Notes button
+      $('#list_notes').addEventListener('click', async () => {
+        notesEl.textContent = 'Loading notes...';
+        try {
+          const res = await fetch('/notes', {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' },
+          });
+          if (!res.ok) throw new Error('Request failed');
+          const notes = await res.json();
+          if (!notes || notes.length === 0) {
+            notesEl.innerHTML = '<p class="muted">No notes found.</p>';
+            return;
+          }
+          notesEl.innerHTML = notes.map(note => (
+            `<div style="border: 1px solid #e5e7eb; padding: 0.75rem; margin-bottom: 0.5rem; border-radius: 0.25rem;">
+              <div style="font-weight: 600; margin-bottom: 0.25rem;">Note #${note.id}</div>
+              <div style="white-space: pre-wrap; margin-bottom: 0.25rem;">${note.content}</div>
+              <div class="muted">Created: ${note.created_at}</div>
+            </div>`
+          )).join('');
+        } catch (err) {
+          console.error(err);
+          notesEl.textContent = 'Error loading notes';
+        }
+      });
+
+    </script>
+  </body>
+  </html>
+
+
