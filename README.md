@@ -25,3 +25,6 @@ These steps work with Python 3.12.
    ```bash
    poetry install --no-interaction
    ```
+
+
+   Note : Week 7 is partially completed and Week 8 is not done as similar project where done in past
